@@ -94,6 +94,7 @@ export function useSongPlayer({
   const toneRef = useRef<ToneStatic | null>(null);
   const synthRef = useRef<TonePolySynth | null>(null);
   const rafRef = useRef<number | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scheduledRef = useRef(false);
   const playedFirstRef = useRef(false);
   const loopRef = useRef(loop);
@@ -113,17 +114,24 @@ export function useSongPlayer({
   const totalRef = useRef(totalDuration);
   totalRef.current = totalDuration;
 
-  // ── RAF: read Transport.seconds → drive progress ───────────────────────────
+  // ── Visual clock ─────────────────────────────────────────────────────────────
+  // Driven by a WALL CLOCK (performance.now), decoupled from audio, so the roll
+  // scrolls even before the AudioContext unlocks. We drive it with BOTH a
+  // setInterval (authoritative — keeps ticking even when the tab is backgrounded
+  // and requestAnimationFrame is suspended) AND rAF (for buttery-smooth updates
+  // while the tab is visible). One shared `tick` reads the clock and updates
+  // state; both drivers just call it.
   const stopRaf = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
   }, []);
 
-  // The RAF is driven by a WALL CLOCK, not Tone, so the visual scroll runs even
-  // when audio is still locked. When audio is running we keep Tone's transport
-  // roughly aligned to the same clock.
   const startRaf = useCallback(() => {
     const tick = () => {
       const total = totalRef.current || 1;
@@ -134,7 +142,6 @@ export function useSongPlayer({
         elapsed = elapsed % total;
         setCurrentTime(elapsed);
         setProgress(elapsed / total);
-        rafRef.current = requestAnimationFrame(tick);
         return;
       }
 
@@ -150,16 +157,24 @@ export function useSongPlayer({
         setCurrentTime(0);
         setProgress(0);
         setPlaying(false);
-        rafRef.current = null;
+        stopRaf();
         return;
       }
 
       setCurrentTime(elapsed);
       setProgress(elapsed / total);
-      rafRef.current = requestAnimationFrame(tick);
     };
+
+    const rafLoop = () => {
+      tick();
+      rafRef.current = requestAnimationFrame(rafLoop);
+    };
+
     stopRaf();
-    rafRef.current = requestAnimationFrame(tick);
+    // Authoritative ticker (survives tab backgrounding).
+    intervalRef.current = setInterval(tick, 60);
+    // Smoothness layer while visible.
+    rafRef.current = requestAnimationFrame(rafLoop);
   }, [stopRaf]);
 
   // ── Schedule notes onto the (synced) Transport ─────────────────────────────
