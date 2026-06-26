@@ -57,7 +57,33 @@ function deriveColor(seed: string): string {
   // Bias hue into a warm band (15–55°) with a couple of cool escapes for variety.
   const warm = 15 + (h % 45); // 15–60
   const hue = h % 7 === 0 ? 200 + (h % 40) : warm; // ~1 in 7 gets a teal accent
-  return `hsl(${hue} 55% 60%)`;
+  // Emit hex (not hsl) so every consumer parses it: the card glow uses a simple
+  // hex→rgba helper, and the piano-roll reads the same value. One format, no
+  // silent fallbacks.
+  return hslToHex(hue, 55, 60);
+}
+
+/** HSL (h°, s%, l%) → "#rrggbb". */
+function hslToHex(h: number, s: number, l: number): string {
+  const sN = s / 100;
+  const lN = l / 100;
+  const c = (1 - Math.abs(2 * lN - 1)) * sN;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = lN - c / 2;
+  let r = 0,
+    g = 0,
+    b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const toHex = (v: number) =>
+    Math.round((v + m) * 255)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 /** Parse a .mid buffer into the metadata + preview notes we store and show. */

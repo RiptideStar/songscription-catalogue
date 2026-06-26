@@ -83,7 +83,12 @@ export async function createTranscription(
   input: CreateInput,
 ): Promise<Transcription> {
   const supabase = createAdminClient();
-  const safe = input.title.replace(/[^a-zA-Z0-9-_]+/g, "-").toLowerCase();
+  // Cap the slug so the storage key stays well under the 1024-char limit even
+  // for an absurdly long title (the full title still lives in the DB column).
+  const safe = input.title
+    .replace(/[^a-zA-Z0-9-_]+/g, "-")
+    .toLowerCase()
+    .slice(0, 80);
   const path = `${Date.now()}-${safe}.mid`;
 
   const upload = await supabase.storage
@@ -141,14 +146,15 @@ export async function updateTranscription(
   return data as Transcription;
 }
 
-/** Record a practice play: bump count + stamp last_played_at. */
+/** Record a practice play: atomically bump count + stamp last_played_at. */
 export async function recordPlay(id: string): Promise<Transcription> {
-  const current = await getTranscription(id);
-  if (!current) throw new Error("recordPlay: not found");
-  return updateTranscription(id, {
-    play_count: current.play_count + 1,
-    last_played_at: new Date().toISOString(),
-  });
+  const supabase = createAdminClient();
+  // Atomic increment via RPC (see migration 0002) — no read-then-write race.
+  const { data, error } = await supabase.rpc("record_play", { p_id: id });
+  if (error) throw new Error(`recordPlay: ${error.message}`);
+  if (!data) throw new Error("recordPlay: not found");
+  // rpc returns the row (single record).
+  return (Array.isArray(data) ? data[0] : data) as Transcription;
 }
 
 /** Delete the row and its blob. */
@@ -156,9 +162,12 @@ export async function deleteTranscription(id: string): Promise<void> {
   const supabase = createAdminClient();
   const row = await getTranscription(id);
   if (!row) return;
-  await supabase.storage.from(BUCKET).remove([row.file_path]);
+  // Delete the row first — it's the source of truth. If the blob removal then
+  // fails we're left with a harmless orphaned file, never a row that points at
+  // a missing blob (which would 404 the detail view).
   const { error } = await supabase.from("transcriptions").delete().eq("id", id);
   if (error) throw new Error(`deleteTranscription: ${error.message}`);
+  await supabase.storage.from(BUCKET).remove([row.file_path]);
 }
 
 /** Public URL for streaming a stored .mid (bucket is public). */

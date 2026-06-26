@@ -22,9 +22,17 @@ interface ToneTransport {
 }
 
 interface TonePolySynth {
+  // When called on a sync()'d synth, the `time` arg is Transport-relative (seconds).
   triggerAttackRelease: (note: string | number, duration: number, time: number, velocity?: number) => void;
+  // sync() ties this instrument to Tone.Transport so scheduled times are offsets
+  // from the Transport timeline rather than absolute AudioContext timestamps.
+  sync: () => TonePolySynth;
   dispose: () => void;
   toDestination: () => TonePolySynth;
+}
+
+interface ToneFrequency {
+  toNote: () => string;
 }
 
 interface ToneStatic {
@@ -33,6 +41,8 @@ interface ToneStatic {
   Transport: ToneTransport;
   PolySynth: new () => TonePolySynth;
   Synth: new () => unknown;
+  // Frequency() converts a MIDI number to a note name Tone can schedule.
+  Frequency: (value: number, units: string) => ToneFrequency;
 }
 
 /** Format seconds as m:ss */
@@ -52,7 +62,6 @@ export default function PlaybackBar({ notes, onProgress, onFirstPlay }: Playback
   const toneRef = useRef<ToneStatic | null>(null);
   const synthRef = useRef<TonePolySynth | null>(null);
   const rafRef = useRef<number | null>(null);
-  const startOffsetRef = useRef(0); // seconds offset when we last pressed play
   const playedFirstRef = useRef(false);
   const scheduledRef = useRef(false);
 
@@ -65,12 +74,26 @@ export default function PlaybackBar({ notes, onProgress, onFirstPlay }: Playback
     const Tone = toneRef.current;
     if (!Tone) return;
     const tick = () => {
-      const t = Math.min(Tone.Transport.seconds, totalDuration);
+      const raw = Tone.Transport.seconds;
+      const t = Math.min(raw, totalDuration);
       setCurrentTime(t);
       if (!dragging) {
         setSeekValue(t / (totalDuration || 1));
         onProgress(t / (totalDuration || 1));
       }
+
+      // End-of-song: stop cleanly, reset Transport to start, flip UI to paused.
+      if (raw >= totalDuration) {
+        Tone.Transport.stop();
+        Tone.Transport.seconds = 0;
+        setCurrentTime(0);
+        setSeekValue(0);
+        onProgress(0);
+        setPlaying(false);
+        rafRef.current = null;
+        return;
+      }
+
       if (Tone.Transport.state === "started") {
         rafRef.current = requestAnimationFrame(tick);
       } else {
@@ -93,9 +116,16 @@ export default function PlaybackBar({ notes, onProgress, onFirstPlay }: Playback
     scheduledRef.current = true;
 
     for (const note of notes) {
-      // Convert midi number → frequency (Tone.js accepts midi numbers)
+      // Convert MIDI number → note name ("C4", "F#3", etc.) because PolySynth
+      // with a synced instrument requires a pitch value Tone can parse directly.
+      // Tone.Frequency(midi, "midi").toNote() is the canonical conversion.
+      const noteName = Tone.Frequency(note.midi, "midi").toNote();
+
+      // Because synth.sync() was called, `note.time` here is a Transport-relative
+      // offset in seconds (i.e. "play this note when Transport.seconds === note.time").
+      // Tone reschedules automatically on seek — no manual re-queuing needed.
       synth.triggerAttackRelease(
-        note.midi,
+        noteName,
         note.duration,
         note.time,
         note.velocity,
@@ -121,21 +151,33 @@ export default function PlaybackBar({ notes, onProgress, onFirstPlay }: Playback
       onFirstPlay?.();
     }
 
-    // Build synth once
+    // Build synth once, sync it to the Transport so scheduled times are
+    // Transport-relative offsets rather than absolute AudioContext timestamps.
     if (!synthRef.current) {
-      // PolySynth wraps a Synth under the hood for polyphony
-      // We cast via unknown to bridge the constructor typing gap
+      // PolySynth wraps a Synth under the hood for polyphony.
+      // Cast via unknown to bridge the constructor typing gap.
       const Synth = Tone.Synth as new () => unknown;
       const poly = new (Tone.PolySynth as unknown as new (SynthClass?: new () => unknown) => TonePolySynth)(Synth);
       poly.toDestination();
+      // sync() MUST be called before triggerAttackRelease so that the `time`
+      // arguments in scheduleNotes are interpreted as Transport offsets.
+      poly.sync();
       synthRef.current = poly;
+    }
+
+    // cancel() MUST come BEFORE scheduleNotes: it clears the Transport timeline
+    // so we never double-schedule if the user stops mid-song and replays.
+    // (If scheduledRef is already true, scheduleNotes is a no-op anyway, but
+    // cancel() is still required when the user seeks then re-plays from scratch.)
+    if (!scheduledRef.current) {
+      Tone.Transport.cancel();
     }
 
     scheduleNotes(Tone, synthRef.current);
 
-    // Seek to current offset and start transport
-    Tone.Transport.cancel();
-    Tone.Transport.seconds = startOffsetRef.current;
+    // On resume after pause, the Transport already has the right position —
+    // no need to touch Transport.seconds here.  On a fresh play from zero the
+    // Transport position is already 0.  Seek sets Transport.seconds directly.
     Tone.Transport.start();
 
     setPlaying(true);
@@ -146,7 +188,8 @@ export default function PlaybackBar({ notes, onProgress, onFirstPlay }: Playback
   const pause = useCallback(() => {
     const Tone = toneRef.current;
     if (!Tone) return;
-    startOffsetRef.current = Tone.Transport.seconds;
+    // Transport.pause() freezes the clock at the current position.
+    // Resume via Transport.start() continues from that same position.
     Tone.Transport.pause();
     stopRaf();
     setPlaying(false);
@@ -155,16 +198,16 @@ export default function PlaybackBar({ notes, onProgress, onFirstPlay }: Playback
   // ── Seek ─────────────────────────────────────────────────────────────────
   const seekTo = useCallback((fraction: number) => {
     const t = fraction * totalDuration;
-    startOffsetRef.current = t;
     setCurrentTime(t);
     setSeekValue(fraction);
     onProgress(fraction);
 
     const Tone = toneRef.current;
     if (!Tone) return;
-    if (Tone.Transport.state === "started") {
-      Tone.Transport.seconds = t;
-    }
+    // Setting Transport.seconds repositions the Transport clock.
+    // Because the synth is sync()'d, all scheduled notes automatically fire
+    // relative to the new position — seek works whether playing or paused.
+    Tone.Transport.seconds = t;
   }, [totalDuration, onProgress]);
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────
@@ -187,7 +230,6 @@ export default function PlaybackBar({ notes, onProgress, onFirstPlay }: Playback
     synthRef.current?.dispose();
     synthRef.current = null;
     // Reset position
-    startOffsetRef.current = 0;
     setCurrentTime(0);
     setSeekValue(0);
     onProgress(0);

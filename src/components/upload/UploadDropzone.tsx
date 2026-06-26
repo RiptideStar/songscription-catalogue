@@ -142,7 +142,7 @@ function FileRow({
   onDismiss: (key: string) => void;
 }) {
   return (
-    <li className="flex items-center gap-3 py-2 px-3 rounded-lg bg-neutral-800/50 border border-neutral-700/40">
+    <li className="relative flex items-center gap-3 py-2 px-3 rounded-lg bg-neutral-800/50 border border-neutral-700/40 overflow-hidden">
       <StatusIcon status={entry.status} />
 
       <span className="flex-1 min-w-0 text-sm text-neutral-300 truncate">

@@ -244,7 +244,6 @@ export default function PianoRoll({ notes, color, progress }: PianoRollProps) {
     <canvas
       ref={canvasRef}
       className="w-full rounded-lg block"
-      style={{ imageRendering: "pixelated" }}
       aria-label="Piano roll visualization"
       role="img"
     />

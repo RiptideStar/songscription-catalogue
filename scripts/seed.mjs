@@ -42,12 +42,27 @@ function deriveDifficulty(noteCount, durationSec, span, trackCount) {
   const raw = density * 0.55 + spanScore * 0.3 + poly * 0.15;
   return Math.max(1, Math.min(5, Math.round(raw * 4) + 1));
 }
+function hslToHex(h, s, l) {
+  const sN = s / 100, lN = l / 100;
+  const c = (1 - Math.abs(2 * lN - 1)) * sN;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = lN - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const toHex = (v) => Math.round((v + m) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
 function deriveColor(seed) {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360;
   const warm = 15 + (h % 45);
   const hue = h % 7 === 0 ? 200 + (h % 40) : warm;
-  return `hsl(${hue} 55% 60%)`;
+  return hslToHex(hue, 55, 60);
 }
 function parse(buf, title) {
   const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
