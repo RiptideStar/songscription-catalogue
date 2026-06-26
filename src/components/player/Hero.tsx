@@ -165,18 +165,23 @@ export default function Hero({
   const player = useSongPlayer({ notes, loop, onFirstPlay: recordPlay });
 
   // ── Auto-play when song changes in preview mode ─────────────────────────────
-  const prevSongIdRef = useRef<string | null>(null);
+  // We track the song id we've already auto-played, and only fire once the MIDI
+  // notes for the active song have actually loaded (notes arrive a tick after
+  // the song id changes, since useMidiNotes fetches + parses). Gating on
+  // notes.length means a hover that lands before parse finishes still autoplays.
+  const playedSongIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!song || committed) return;
-    if (song.id === prevSongIdRef.current) return;
-    prevSongIdRef.current = song.id;
+    if (notes.length === 0) return; // wait for MIDI to load
+    if (song.id === playedSongIdRef.current) return;
+    playedSongIdRef.current = song.id;
 
-    // Attempt autoplay; browsers may block audio until first gesture — that's
-    // fine, the roll still animates visually. We swallow the rejection.
-    void player.play().catch(() => {});
+    // Auto-play on song change. The visual scroll starts immediately; audio
+    // layers in once the browser has unlocked the AudioContext.
+    player.play();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [song?.id, committed]);
+  }, [song?.id, committed, notes.length]);
 
   // ── Stop looping when committed flips true ──────────────────────────────────
   const prevCommittedRef = useRef(committed);
@@ -236,7 +241,7 @@ export default function Hero({
     if (player.armed) return;
     const unlock = () => {
       if (!committed && notes.length > 0) {
-        void player.play().catch(() => {});
+        player.play();
       }
     };
     window.addEventListener("pointerdown", unlock, { once: true });
