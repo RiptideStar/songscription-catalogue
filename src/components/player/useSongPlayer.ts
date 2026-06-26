@@ -106,6 +106,7 @@ export function useSongPlayer({
   const startedAtRef = useRef(0);
   const elapsedAtRef = useRef(0);
   const audioRef = useRef(false); // is Tone audio actually running right now
+  const startingRef = useRef(false); // tryStartAudio is mid-flight (re-entrancy lock)
 
   const totalDuration =
     notes.length > 0
@@ -206,6 +207,13 @@ export function useSongPlayer({
   // Best-effort: bring up Tone audio and align it to the visual clock. Safe to
   // call repeatedly; resolves silently if the browser still blocks audio.
   const tryStartAudio = useCallback(async () => {
+    // Re-entrancy lock. tryStartAudio is async (it awaits Tone import + start),
+    // and on first load `play()` can fire several times before audio is up. Set
+    // a SYNCHRONOUS flag before the first await so concurrent calls bail here —
+    // otherwise they all sail past the audioRef guard (which isn't set until the
+    // end) and each calls Transport.start(), stacking overlapping playbacks.
+    if (startingRef.current || audioRef.current) return;
+    startingRef.current = true;
     try {
       const Tone = await ensureTone();
       await Tone.start();
@@ -237,6 +245,8 @@ export function useSongPlayer({
       audioRef.current = true;
     } catch {
       // Audio still locked — visual keeps running; we retry on next play/gesture.
+    } finally {
+      startingRef.current = false;
     }
   }, [ensureTone, scheduleNotes]);
 
@@ -326,6 +336,7 @@ export function useSongPlayer({
     scheduledRef.current = false;
     playedFirstRef.current = false;
     audioRef.current = false;
+    startingRef.current = false;
     elapsedAtRef.current = 0;
     startedAtRef.current = performance.now();
     synthRef.current?.dispose();
