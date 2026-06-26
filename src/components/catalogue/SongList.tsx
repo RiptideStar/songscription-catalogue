@@ -117,11 +117,16 @@ function SongPanel({
     setConfirmDelete(false);
   }, []);
 
-  // Panel style: osu!-style pop-out when active
+  // Whether to reveal the "→ practice" affordance: on hover-preview, not once
+  // the song is already committed (practicing).
+  const showPractice = isActive && !isCommitted;
+
+  // Panel style: osu!-style pop-out when active. The pop is a touch more
+  // significant than a plain hover so committing-by-click feels intentional.
   const panelStyle: React.CSSProperties = isActive
     ? {
-        transform: "translateX(-8px) scaleX(1.015)",
-        boxShadow: `0 0 0 1px ${hexToRgba(song.color, 0.6)}, 0 4px 20px ${hexToRgba(song.color, 0.3)}`,
+        transform: "translateX(-10px) scale(1.025)",
+        boxShadow: `0 0 0 1px ${hexToRgba(song.color, 0.6)}, 0 6px 26px ${hexToRgba(song.color, 0.32)}`,
         backgroundColor: "rgba(31, 26, 20, 0.95)",
       }
     : {};
@@ -158,6 +163,9 @@ function SongPanel({
           }
         }}
         onPointerEnter={() => onHover(song.id)}
+        // Keyboard nav previews the focused song too, so the practice arrow and
+        // hero preview behave the same whether you mouse or tab.
+        onFocus={() => onHover(song.id)}
         aria-pressed={isActive}
         aria-label={`${song.title}${isActive ? ", currently selected" : ""}${isCommitted ? ", practicing" : ""}`}
       >
@@ -168,8 +176,33 @@ function SongPanel({
           aria-hidden
         />
 
-        {/* Panel body */}
-        <span className="flex-1 min-w-0 flex flex-col gap-1 px-3 py-2.5">
+        {/* Practice affordance — a right-edge arrow that lives clipped beneath
+            the row and slides up + fades in as the row grows on hover. Reads as
+            "click → practice". Hidden once the song is committed (practicing). */}
+        <span
+          className={[
+            "pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center pr-3.5",
+            "transition-all duration-200 ease-out",
+            showPractice
+              ? "translate-y-0 opacity-100"
+              : "translate-y-4 opacity-0",
+          ].join(" ")}
+          style={{ color: song.color }}
+          aria-hidden
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} className="h-5 w-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h13m0 0l-5-5m5 5l-5 5" />
+          </svg>
+        </span>
+
+        {/* Panel body — grows a little taller on hover to make room for the
+            arrow rising up from beneath. */}
+        <span
+          className={[
+            "flex-1 min-w-0 flex flex-col gap-1 pl-3 transition-all duration-200 ease-out",
+            showPractice ? "py-3.5 pr-9" : "py-2.5 pr-3",
+          ].join(" ")}
+        >
           {/* Title row */}
           <span className="flex items-start justify-between gap-2">
             <span

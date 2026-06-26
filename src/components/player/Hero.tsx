@@ -29,7 +29,6 @@ interface HeroProps {
   committed: boolean;
   totalCount: number;
   onUpdate: (updated: Transcription) => void;
-  onPractice: () => void;
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -143,7 +142,6 @@ export default function Hero({
   committed,
   totalCount,
   onUpdate,
-  onPractice,
 }: HeroProps) {
   // ── MIDI notes ──────────────────────────────────────────────────────────────
   const { notes, loading: midiLoading, error: midiError } = useMidiNotes(
@@ -565,29 +563,6 @@ export default function Hero({
               </span>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ── 4. Practice CTA ───────────────────────────────────────────────────── */}
-      {song && !committed && (
-        <div className="mx-5 mb-5 shrink-0">
-          <button
-            type="button"
-            onClick={onPractice}
-            className="
-              w-full rounded-xl border border-brass/25 bg-brass/8 py-3
-              font-serif text-base font-light tracking-wide text-brass/80
-              transition-all
-              hover:border-brass/40 hover:bg-brass/14 hover:text-brass
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass
-              active:scale-[0.99]
-            "
-            style={{
-              boxShadow: `0 0 20px ${hexToRgba(glowColor, 0.06)}`,
-            }}
-          >
-            Practice this piece →
-          </button>
         </div>
       )}
 

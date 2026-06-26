@@ -185,7 +185,6 @@ export default function CatalogueShell({
           committed={isCommitted}
           totalCount={songs.length}
           onUpdate={handleUpdate}
-          onPractice={() => activeSong && handleSelect(activeSong.id)}
         />
       </section>
 
