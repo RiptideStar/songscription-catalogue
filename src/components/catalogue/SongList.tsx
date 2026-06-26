@@ -11,7 +11,8 @@ interface SongListProps {
   songs: Transcription[];
   totalCount: number;
   activeId: string | null;
-  selectedId: string | null;
+  /** The committed (clicked-into-practice) song, if any. */
+  committedId: string | null;
   query: string;
   sort: SortKey;
   favOnly: boolean;
@@ -49,7 +50,7 @@ function DifficultyDots({ level }: { level: number }) {
 interface SongPanelProps {
   song: Transcription;
   isActive: boolean;
-  isSelected: boolean;
+  isCommitted: boolean;
   onHover: (id: string | null) => void;
   onSelect: (id: string) => void;
   onUpdate: (updated: Transcription) => void;
@@ -59,7 +60,7 @@ interface SongPanelProps {
 function SongPanel({
   song,
   isActive,
-  isSelected,
+  isCommitted,
   onHover,
   onSelect,
   onUpdate,
@@ -157,8 +158,8 @@ function SongPanel({
           }
         }}
         onMouseEnter={() => onHover(song.id)}
-        aria-pressed={isSelected}
-        aria-label={`${song.title}${isSelected ? ", currently selected" : ""}`}
+        aria-pressed={isActive}
+        aria-label={`${song.title}${isActive ? ", currently selected" : ""}${isCommitted ? ", practicing" : ""}`}
       >
         {/* Left accent bar */}
         <span
@@ -241,9 +242,9 @@ function SongPanel({
             </span>
           </span>
 
-          {/* Selected indicator + delete */}
+          {/* Committed (practicing) indicator + delete */}
           <span className="flex items-center justify-between min-h-[14px]">
-            {isSelected ? (
+            {isCommitted ? (
               <span className="text-[10px] text-amber-400/80 font-mono tracking-wide">
                 ▶ practicing
               </span>
@@ -301,7 +302,7 @@ export default function SongList({
   songs,
   totalCount,
   activeId,
-  selectedId,
+  committedId,
   query,
   sort,
   favOnly,
@@ -479,7 +480,7 @@ export default function SongList({
               key={song.id}
               song={song}
               isActive={song.id === activeId}
-              isSelected={song.id === selectedId}
+              isCommitted={song.id === committedId}
               onHover={onHover}
               onSelect={onSelect}
               onUpdate={onUpdate}

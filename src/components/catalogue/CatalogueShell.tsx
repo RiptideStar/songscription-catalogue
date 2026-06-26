@@ -107,20 +107,31 @@ export default function CatalogueShell({
   }, [songs, favOnly, query, sort]);
 
   // ── Active song resolution ─────────────────────────────────────────────────
-  const activeId = hoveredId ?? selectedId ?? visibleSongs[0]?.id ?? null;
+  // Hovering a song *selects* it (it stays on the left when you move away), so
+  // the hero always reflects `selectedId`. `hoveredId` only drives the list's
+  // own hover highlight, not what the hero shows.
+  const activeId = selectedId ?? visibleSongs[0]?.id ?? null;
   const activeSong = songs.find((s) => s.id === activeId) ?? null;
-  // Hover overrides commit: previewing a *different* song un-commits the view.
-  const isCommitted = committed && hoveredId === null;
+  const isCommitted = committed;
 
   // ── Selection handlers ─────────────────────────────────────────────────────
-  const handleHover = useCallback((id: string | null) => {
-    setHoveredId(id);
-  }, []);
+  // Hover = preview-select: switch the hero to this song (it persists when the
+  // mouse leaves the list), and drop out of practice mode so you're previewing.
+  const handleHover = useCallback(
+    (id: string | null) => {
+      setHoveredId(id);
+      if (id !== null && id !== selectedId) {
+        setSelectedId(id);
+        setCommitted(false);
+        updateUrl(id);
+      }
+    },
+    [selectedId, updateUrl],
+  );
 
   const handleSelect = useCallback(
     (id: string) => {
       setSelectedId(id);
-      setHoveredId(null);
       setCommitted(true);
       updateUrl(id);
     },
@@ -188,7 +199,7 @@ export default function CatalogueShell({
           songs={visibleSongs}
           totalCount={songs.length}
           activeId={activeId}
-          selectedId={selectedId}
+          committedId={committed ? selectedId : null}
           query={query}
           sort={sort}
           favOnly={favOnly}
