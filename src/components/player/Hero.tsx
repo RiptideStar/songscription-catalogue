@@ -227,6 +227,44 @@ export default function Hero({
     [player],
   );
 
+  // ── One-time audio unlock ────────────────────────────────────────────────────
+  // Browsers block the AudioContext until a user gesture, so the very first
+  // hover-autoplay is silent. On the first interaction anywhere, arm audio and
+  // (re)start the current preview so sound kicks in. Every later hover then
+  // plays with sound automatically.
+  useEffect(() => {
+    if (player.armed) return;
+    const unlock = () => {
+      if (!committed && notes.length > 0) {
+        void player.play().catch(() => {});
+      }
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player.armed, committed, notes.length]);
+
+  // ── Spacebar = play / pause ──────────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space" && e.key !== " ") return;
+      // Don't hijack the spacebar while typing in the search box etc.
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      if (notes.length === 0) return;
+      e.preventDefault();
+      player.toggle();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player.toggle, notes.length]);
+
   // ── Glow colour (derived from song.color) ───────────────────────────────────
   const glowColor = song?.color ?? "#caa46a";
   const glowShadow = `0 0 60px ${hexToRgba(glowColor, 0.18)}, 0 0 120px ${hexToRgba(glowColor, 0.08)}`;
