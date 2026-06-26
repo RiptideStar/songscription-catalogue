@@ -1,17 +1,16 @@
 # Songscription — Catalogue
 
-A catalogue page for a piano-learning app. Upload a `.mid` file (the stand-in for "you just transcribed a song"), it joins your library, and you click in to a learner-focused detail view with a real piano-roll you can play back in the browser.
+A catalogue for a piano-learning app, built as a single osu!-style song-select surface. Upload a `.mid` file (the stand-in for "you just transcribed a song"), it joins your library on the right, and hovering it previews the song in a big auto-looping scrolling piano-roll on the left. Click to commit it to practice mode.
 
-Built for the Songscription full-stack take-home. Live demo + repo links are in the submission email.
-
-![Catalogue](docs/screenshots/catalogue.png)
+Built for the Songscription full-stack take-home. Live demo link is in the submission email — the experience (hover-to-preview, the auto-looping scrolling roll, the audio) is best seen running, so I'd start there.
 
 ## What it does
 
 - **Upload** `.mid` files via drag-and-drop or click. The file is parsed server-side, the blob goes to Supabase Storage, and the metadata lands in Postgres. Optimistic UI on the catalogue.
-- **Browse** every transcription as a grid of cards. Each card shows the real parsed musical facts (key, tempo, duration, difficulty, note count) and a per-song accent color derived from the file's fingerprint, so songs are easy to tell apart.
+- **Browse** the library as an osu!-style song-select list on the right. Each panel shows the real parsed facts (key, tempo, duration, difficulty) and a per-song accent color derived from the file's fingerprint, with a satisfying pop-and-glow on the active song.
+- **Hover to preview**: the big left hero is the star — a real-time **scrolling piano-roll of the actual notes** with a pinned playhead, auto-looping **playback** (Tone.js). Metadata is intentionally a whisper so the music dominates.
 - **Discover** with search, sort (recent / A–Z / difficulty / duration / recently played), a favorites filter, and a "Surprise me" shuffle for the days you don't know what to practice.
-- **Click in** to a detail view: a canvas **piano-roll of the actual notes**, in-browser **playback** (Tone.js) with a moving playhead, the full metadata a learner cares about, and a placeholder panel for the real practice/piano-roll experience.
+- **Click to commit** a song to practice mode (a polished placeholder for the real piano-roll practice engine). The selection deep-links via `?song=` so it survives refresh and is shareable.
 
 It persists. Refresh and everything is still there, because it's all in Supabase.
 
@@ -21,7 +20,7 @@ I went with Supabase because it's what Songscription uses, and it's the right to
 
 ### Data model — `transcriptions`
 
-Every song is one row. The interesting design choice is **what to store**: I parse the MIDI once on upload and persist the summary facts a learner actually scans (tempo, key, time signature, duration, note count, pitch range, track count), plus a derived `difficulty` (1–5) and a derived `color` accent. The raw note events are NOT stored in the row — they'd bloat it and they're only needed on the detail view, so I re-parse the blob client-side there. That keeps list queries tiny and fast.
+Every song is one row. The interesting design choice is **what to store**: I parse the MIDI once on upload and persist the summary facts a learner actually scans (tempo, key, time signature, duration, note count, pitch range, track count), plus a derived `difficulty` (1–5) and a derived `color` accent. The raw note events are NOT stored in the row — they'd bloat it and they're only needed when a song is previewed, so I re-parse the blob client-side on hover. That keeps list queries tiny and fast.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -80,12 +79,17 @@ npm run dev   # http://localhost:3000
 ```
 src/
   app/
-    page.tsx                  catalogue (server-fetched initial list)
-    song/[id]/page.tsx        detail view
+    page.tsx                  single-surface catalogue (server-fetched list + MIDI URLs)
     api/transcriptions/       REST route handlers (list, upload, get, patch, delete, play)
   components/
-    catalogue/                grid, card, discovery bar
-    detail/                   piano-roll (canvas), playback (Tone.js), metadata, practice placeholder
+    catalogue/
+      CatalogueShell.tsx      master-detail owner: selection, hover-preview, ?song deep-link
+      SongList.tsx            osu!-style right song-select list (search / sort / favorites)
+    player/
+      Hero.tsx                dominant left hero: scrolling roll, transport, practice commit
+      ScrollingPianoRoll.tsx  canvas roll with a pinned playhead, notes scroll past
+      useSongPlayer.ts        Tone.js engine (play/seek/loop, RAF-driven progress)
+    detail/                   piano-roll helpers, MIDI loader, practice placeholder (reused)
     upload/                   drag-and-drop dropzone
   lib/
     midi.ts                   MIDI parsing + difficulty/color derivation
