@@ -189,7 +189,9 @@ export default function CatalogueShell({
       </section>
 
       {/* ── RIGHT: Song list (osu! song-select) ── */}
-      <aside className="w-[300px] shrink-0 border-l border-room-line bg-room/60 backdrop-blur-sm sm:w-[340px] lg:w-[380px]">
+      {/* relative z-10 so a popped-out row (which slides left on hover) floats
+          over the hero on the left, instead of being clipped beneath it. */}
+      <aside className="relative z-10 w-[300px] shrink-0 border-l border-room-line bg-room/60 backdrop-blur-sm sm:w-[340px] lg:w-[380px]">
         <SongList
           songs={visibleSongs}
           totalCount={songs.length}

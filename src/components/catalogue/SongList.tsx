@@ -181,18 +181,33 @@ function SongPanel({
             "click → practice". Hidden once the song is committed (practicing). */}
         <span
           className={[
-            "pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center pr-3.5",
+            "pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center pr-3",
             "transition-all duration-200 ease-out",
             showPractice
               ? "translate-y-0 opacity-100"
               : "translate-y-4 opacity-0",
           ].join(" ")}
-          style={{ color: song.color }}
           aria-hidden
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} className="h-5 w-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h13m0 0l-5-5m5 5l-5 5" />
-          </svg>
+          {/* Arrow sits in its own accent-colored badge so it reads as a
+              distinct "go" affordance, not just a glyph on the row surface. */}
+          <span
+            className="flex h-7 w-7 items-center justify-center rounded-full shadow-md"
+            style={{
+              backgroundColor: song.color,
+              boxShadow: `0 2px 10px ${hexToRgba(song.color, 0.5)}`,
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#1a1610"
+              strokeWidth={2.5}
+              className="h-4 w-4"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h13m0 0l-5-5m5 5l-5 5" />
+            </svg>
+          </span>
         </span>
 
         {/* Panel body — grows a little taller on hover to make room for the
