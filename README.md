@@ -1,83 +1,98 @@
-# Songscription Fullstack Take-Home
+# Songscription — Catalogue
 
-Thanks for taking the time to do this. This project gives you a feel for the kind of work you'd be doing at Songscription, and gives us a sense of how you think about UI, UX, and backend integration.
+A catalogue page for a piano-learning app. Upload a `.mid` file (the stand-in for "you just transcribed a song"), it joins your library, and you click in to a learner-focused detail view with a real piano-roll you can play back in the browser.
 
-## Product context
+Built for the Songscription full-stack take-home. Live demo + repo links are in the submission email.
 
-We're building a piano learning app where users can transcribe any music into a MIDI file, then learn it using an interactive piano roll. One page of that app is the **catalogue page** where users see every transcription they've created and click into one to practice it.
+![Catalogue](docs/screenshots/catalogue.png)
 
-**You're building that catalogue page.**
+## What it does
 
-You don't need to build any transcription logic. Treat uploading a `.mid` file as a stand-in for "the user just transcribed a song". The upload is the action that adds an entry to their library.
+- **Upload** `.mid` files via drag-and-drop or click. The file is parsed server-side, the blob goes to Supabase Storage, and the metadata lands in Postgres. Optimistic UI on the catalogue.
+- **Browse** every transcription as a grid of cards. Each card shows the real parsed musical facts (key, tempo, duration, difficulty, note count) and a per-song accent color derived from the file's fingerprint, so songs are easy to tell apart.
+- **Discover** with search, sort (recent / A–Z / difficulty / duration / recently played), a favorites filter, and a "Surprise me" shuffle for the days you don't know what to practice.
+- **Click in** to a detail view: a canvas **piano-roll of the actual notes**, in-browser **playback** (Tone.js) with a moving playhead, the full metadata a learner cares about, and a placeholder panel for the real practice/piano-roll experience.
 
-## The task
+It persists. Refresh and everything is still there, because it's all in Supabase.
 
-Build a single-page web app where a user can:
+## Backend: Supabase (Postgres + Storage)
 
-1. **Upload a MIDI file** to add it to their catalogue. (Stand-in for "transcribe a song.")
-2. **Browse the catalogue** of every file they've added.
-3. **Click into a file** to see some details about it. Think about what details would be relevant for a learner of the song.
+I went with Supabase because it's what Songscription uses, and it's the right tool here: a relational table for the queryable metadata plus object storage for the raw `.mid` blobs, in one service.
 
-## Things to think about
+### Data model — `transcriptions`
 
-These are examples of the kinds of product questions we think about. You don't have to answer or address them all in your build, they're just here as examples of different paths you could explore.
+Every song is one row. The interesting design choice is **what to store**: I parse the MIDI once on upload and persist the summary facts a learner actually scans (tempo, key, time signature, duration, note count, pitch range, track count), plus a derived `difficulty` (1–5) and a derived `color` accent. The raw note events are NOT stored in the row — they'd bloat it and they're only needed on the detail view, so I re-parse the blob client-side there. That keeps list queries tiny and fast.
 
-- How do we make the **upload process** as smooth as possible? What happens during upload, after, and on failure?
-- Once a file is in the catalogue, **how does it appear to the user?** How do you make it easy to differentiate between songs? What if they don't know exactly what they want to practice that day?
-- As the catalogue grows, **how does someone find the song they want to come back to?** Search? Filter? Sort? Tags? Recently played? Favorites? Folders? Something else?
-- **What settings might a user want?** Per-file? Library-wide? What lives where?
-- What does the catalogue feel like with **0 items**? With **3**? With **300**?
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | pk |
+| `title` | text | from filename or user override |
+| `created_at` | timestamptz | |
+| `file_path` | text | key in the `midi` storage bucket |
+| `file_size` | int | bytes |
+| `duration_sec` | real | parsed |
+| `tempo_bpm` | int \| null | many MIDIs declare none |
+| `key_sig` | text \| null | e.g. "C major" |
+| `time_sig` | text \| null | e.g. "4/4" |
+| `track_count` | int | tracks with notes |
+| `note_count` | int | |
+| `lowest_note` / `highest_note` | int \| null | MIDI note numbers → shown as "E2 – F5" |
+| `difficulty` | int (1–5) | derived from note density + range + polyphony |
+| `color` | text | derived accent, stable per file |
+| `is_favorite` | bool | |
+| `last_played_at` | timestamptz \| null | bumped on playback |
+| `play_count` | int | bumped on playback |
 
-If you need data we haven't given you (favorites, last-practiced timestamps, accuracy metrics, practice logs, tags, difficulty, user info, etc.), invent it. Mock data is fine and encouraged.
+Indexed on `created_at`, `is_favorite` (partial), `last_played_at`, and `lower(title)` so the sorts and search stay cheap as the library grows.
 
-## What we're looking for
+The migration is in [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql). Writes go through the service-role key server-side; the public client gets read-only access via RLS (there's no auth in this app by design).
 
-- **It must persist.** Refreshing the page should keep the files. Use any backend you like to store the file and any extra metadata about it. We use Supabase, but you can choose whatever backend you're comfortable with.
-- **Visual polish.** This is a product surface. Empty states, hover states, loading, transitions, typography, spacing etc should be reasonable.
-- **How you store and query data.** We want to see how you store the data, which metadata you decide to add to the database, etc. 
-- **Product thinking.** Is the final output intuitive and usable? Can you take inspiration from other similar applications?
-- **Creative problem solving.** We've given you the bare minimum to get started. If you think the catalogue needs audio playback, previews, thumbnails, waveforms, anything, feel free to add it. There's no "right" set of features...surprise us.
+### Storage boundary
 
-## What we're NOT looking for
-
-- **Auth.** Don't build login, that's a time sink. Treat it as a single user. If you want richer UI (avatars, settings, "your" stats, etc.), feel free to mock a user's data. We just want to see the product surface.
-- **A custom piano roll or practice experience.** If you want to design around it (e.g., a "Practice" button on each catalogue entry), feel free to leave a placeholder region (something like a panel that says *"this is where the piano roll would go"* is totally fine).
-
-## Time
-
-**Spend 2-3 hours.** We'd like to see what you can do in this time window. We recommend time boxing it and sending us what you've got by the 3-hour mark.
-
-Tools like Cursor, Copilot, ChatGPT, Claude, etc. are all fair game.
-
-## Getting started
-
-```bash
-npm install
-npm run dev
-```
-
-The app runs at [http://localhost:3000](http://localhost:3000). Sample `.mid` files are in the `public/samples/` folder. You're also free to use your own.
+Nothing in the UI touches Supabase directly. Everything reads/writes through [`src/lib/storage.ts`](src/lib/storage.ts), so the backend is swappable and the data access is in one place.
 
 ## Stack
 
-The starter is **Next.js 15 (App Router) + TypeScript + Tailwind**.
+Next.js 15 (App Router) · TypeScript · Tailwind · Supabase · `@tonejs/midi` (parsing) · `tone` (playback) · Fraunces / Inter / JetBrains Mono.
 
-You're free to:
+## Running it locally
 
-- Restructure the project layout however you want.
-- Swap the styling system, add a component library (shadcn, MUI, Mantine, etc.).
-- Add any libraries you'd add at work.
+```bash
+npm install
 
-## Submission
+# .env.local
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
 
-When you're done, email **[katie@songscription.ai](mailto:katie@songscription.ai)** and **[alex@songscription.ai](mailto:alex@songscription.ai)** with:
+# apply the schema to your Supabase project
+supabase link --project-ref <your-ref>
+supabase db push
 
-1. A link to your **GitHub repo** (public, or invite `ayeitskatie1212` if private).
-2. Screenshots of the finished UI.
-3. A short note (3–5 sentences) covering:
-  - What backend you chose and why.
-  - One thing you'd do differently with more time.
-  - One thing you're proud of.
+# seed the 3 sample songs with mock practice data (optional)
+npm run seed
 
+npm run dev   # http://localhost:3000
+```
 
-That's it. Looking forward to seeing what you build!
+## Project layout
+
+```
+src/
+  app/
+    page.tsx                  catalogue (server-fetched initial list)
+    song/[id]/page.tsx        detail view
+    api/transcriptions/       REST route handlers (list, upload, get, patch, delete, play)
+  components/
+    catalogue/                grid, card, discovery bar
+    detail/                   piano-roll (canvas), playback (Tone.js), metadata, practice placeholder
+    upload/                   drag-and-drop dropzone
+  lib/
+    midi.ts                   MIDI parsing + difficulty/color derivation
+    storage.ts               the Supabase boundary
+    types.ts                  shared types
+    format.ts                duration / relative-time / note-name helpers
+  utils/supabase/            clients (browser publishable, server service-role)
+supabase/migrations/         schema
+scripts/seed.mjs             sample data seeder
+```

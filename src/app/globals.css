@@ -2,20 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Songscription — "lamplit practice room at night."
+  Warm near-black ground, ivory (piano-key) text, brass accent, felt-green
+  secondary. Colors live here as tokens and are mirrored in tailwind.config.ts.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #0a0a0a;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --room: #16130f; /* warm near-black ground */
+  --room-raised: #1f1a14; /* raised surfaces / cards */
+  --room-line: #2c251c; /* hairline borders */
+  --ivory: #ece4d3; /* piano-key off-white, primary text */
+  --ivory-dim: #a89e8c; /* secondary text */
+  --brass: #caa46a; /* the one accent */
+  --brass-bright: #e4c089;
+  --felt: #3f5d52; /* hammer-felt green, used sparingly */
 }
 
 html,
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--room);
+  color: var(--ivory);
+}
+
+/* Honor reduced-motion globally. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Custom scrollbar to match the room. */
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: var(--room);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--room-line);
+  border-radius: 6px;
+  border: 2px solid var(--room);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3024;
+}
+
+/* Selection in brass. */
+::selection {
+  background: rgba(202, 164, 106, 0.3);
+  color: var(--ivory);
+}
+
+/* Fraunces optical sizing for large display text. */
+.font-serif {
+  font-optical-sizing: auto;
 }

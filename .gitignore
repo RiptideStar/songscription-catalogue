@@ -34,3 +34,10 @@ next-env.d.ts
 # editor
 .vscode/
 .idea/
+
+# local agent tooling
+.claude/
+
+# supabase cli scratch
+supabase/.temp/
+supabase/.branches/
