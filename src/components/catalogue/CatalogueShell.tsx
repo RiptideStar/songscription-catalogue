@@ -8,11 +8,12 @@
  * pinned to the edge.
  *
  * Interaction model:
+ *   - No deep link               → the hero shows the welcome state.
  *   - HOVER a song in the list   → it becomes the *preview* (auto-loops in hero).
  *   - CLICK a song               → it *commits* (selected) → Practice mode.
- *   - Mouse leaves the list      → preview falls back to the selected song.
+ *   - Mouse leaves the list      → preview falls back to the selected song, if any.
  *
- * The "active" song shown in the hero is: hovered ?? selected ?? first.
+ * The "active" song shown in the hero is: hovered ?? selected ?? null.
  * Selection is deep-linked via ?song=<id> so refresh/share is stable.
  *
  * This component owns song-list state (uploads/favorite/delete) and selection;
@@ -39,9 +40,7 @@ export default function CatalogueShell({
 }: CatalogueShellProps) {
   const [songs, setSongs] = useState<Transcription[]>(initialSongs);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialSongId ?? initialSongs[0]?.id ?? null,
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(initialSongId);
   // Whether the active song is "committed" (clicked) → drives Practice state.
   const [committed, setCommitted] = useState(false);
 
@@ -66,10 +65,11 @@ export default function CatalogueShell({
   useEffect(() => {
     const onPop = () => {
       const urlId = new URLSearchParams(window.location.search).get("song");
-      if (urlId && songs.some((s) => s.id === urlId)) {
-        setSelectedId(urlId);
-        setCommitted(false);
-      }
+      const nextId =
+        urlId && songs.some((s) => s.id === urlId) ? urlId : null;
+      setHoveredId(null);
+      setSelectedId(nextId);
+      setCommitted(false);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -107,26 +107,22 @@ export default function CatalogueShell({
   }, [songs, favOnly, query, sort]);
 
   // ── Active song resolution ─────────────────────────────────────────────────
-  // Hovering a song *selects* it (it stays on the left when you move away), so
-  // the hero always reflects `selectedId`. `hoveredId` only drives the list's
-  // own hover highlight, not what the hero shows.
-  const activeId = selectedId ?? visibleSongs[0]?.id ?? null;
+  // Hover previews without committing. If nothing is hovered or selected, the
+  // hero remains in its welcome state.
+  const activeId = hoveredId ?? selectedId;
   const activeSong = songs.find((s) => s.id === activeId) ?? null;
   const isCommitted = committed;
 
   // ── Selection handlers ─────────────────────────────────────────────────────
-  // Hover = preview-select: switch the hero to this song (it persists when the
-  // mouse leaves the list), and drop out of practice mode so you're previewing.
+  // Hover = preview: switch the hero while hovered and drop out of practice mode.
   const handleHover = useCallback(
     (id: string | null) => {
       setHoveredId(id);
-      if (id !== null && id !== selectedId) {
-        setSelectedId(id);
+      if (id !== null) {
         setCommitted(false);
-        updateUrl(id);
       }
     },
-    [selectedId, updateUrl],
+    [],
   );
 
   const handleSelect = useCallback(
@@ -155,18 +151,18 @@ export default function CatalogueShell({
 
   const handleDelete = useCallback(
     (id: string) => {
-      setSongs((prev) => {
-        const next = prev.filter((s) => s.id !== id);
-        if (selectedId === id) {
-          const fallback = next[0]?.id ?? null;
-          setSelectedId(fallback);
+      setHoveredId((current) => (current === id ? null : current));
+      setSelectedId((current) => {
+        if (current === id) {
           setCommitted(false);
-          updateUrl(fallback);
+          updateUrl(null);
+          return null;
         }
-        return next;
+        return current;
       });
+      setSongs((prev) => prev.filter((s) => s.id !== id));
     },
-    [selectedId, updateUrl],
+    [updateUrl],
   );
 
   const handleSurprise = useCallback(() => {

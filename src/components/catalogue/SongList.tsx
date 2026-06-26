@@ -157,7 +157,7 @@ function SongPanel({
             onSelect(song.id);
           }
         }}
-        onMouseEnter={() => onHover(song.id)}
+        onPointerEnter={() => onHover(song.id)}
         aria-pressed={isActive}
         aria-label={`${song.title}${isActive ? ", currently selected" : ""}${isCommitted ? ", practicing" : ""}`}
       >
@@ -472,7 +472,7 @@ export default function SongList({
         /* Scrolling song list */
         <ul
           className="flex-1 overflow-y-auto flex flex-col gap-1 px-2 pb-4"
-          onMouseLeave={() => onHover(null)}
+          onPointerLeave={() => onHover(null)}
           aria-label="Song library"
         >
           {songs.map((song) => (

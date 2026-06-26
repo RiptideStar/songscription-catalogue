@@ -9,6 +9,10 @@ interface UseMidiNotesResult {
   error: string | null;
 }
 
+interface MidiNotesState extends UseMidiNotesResult {
+  url: string;
+}
+
 /**
  * Fetch and parse a .mid file client-side using @tonejs/midi.
  * Returns flattened PreviewNote[] across all tracks, sorted by time.
@@ -17,16 +21,25 @@ interface UseMidiNotesResult {
  * (it accesses browser globals during initialisation).
  */
 export function useMidiNotes(midiUrl: string): UseMidiNotesResult {
-  const [notes, setNotes] = useState<PreviewNote[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<MidiNotesState>(() => ({
+    url: midiUrl,
+    notes: [],
+    loading: Boolean(midiUrl),
+    error: null,
+  }));
 
   useEffect(() => {
     let cancelled = false;
 
+    if (!midiUrl) {
+      setState({ url: midiUrl, notes: [], loading: false, error: null });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     async function load() {
-      setLoading(true);
-      setError(null);
+      setState({ url: midiUrl, notes: [], loading: true, error: null });
 
       try {
         // Fetch the raw .mid bytes
@@ -55,13 +68,16 @@ export function useMidiNotes(midiUrl: string): UseMidiNotesResult {
         all.sort((a, b) => a.time - b.time);
 
         if (!cancelled) {
-          setNotes(all);
-          setLoading(false);
+          setState({ url: midiUrl, notes: all, loading: false, error: null });
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load MIDI");
-          setLoading(false);
+          setState({
+            url: midiUrl,
+            notes: [],
+            loading: false,
+            error: err instanceof Error ? err.message : "Failed to load MIDI",
+          });
         }
       }
     }
@@ -72,5 +88,13 @@ export function useMidiNotes(midiUrl: string): UseMidiNotesResult {
     };
   }, [midiUrl]);
 
-  return { notes, loading, error };
+  if (state.url !== midiUrl) {
+    return { notes: [], loading: Boolean(midiUrl), error: null };
+  }
+
+  return {
+    notes: state.notes,
+    loading: state.loading,
+    error: state.error,
+  };
 }

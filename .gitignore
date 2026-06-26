@@ -37,6 +37,7 @@ next-env.d.ts
 
 # local agent tooling
 .claude/
+.superpowers/
 
 # supabase cli scratch
 supabase/.temp/

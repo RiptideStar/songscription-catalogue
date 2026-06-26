@@ -163,25 +163,30 @@ export default function Hero({
   }, [song]);
 
   const player = useSongPlayer({ notes, loop, onFirstPlay: recordPlay });
+  const playPreview = player.play;
 
   // ── Auto-play when song changes in preview mode ─────────────────────────────
-  // We track the song id we've already auto-played, and only fire once the MIDI
-  // notes for the active song have actually loaded (notes arrive a tick after
-  // the song id changes, since useMidiNotes fetches + parses). Gating on
-  // notes.length means a hover that lands before parse finishes still autoplays.
-  const playedSongIdRef = useRef<string | null>(null);
+  // We track the song+URL we've already auto-played, and only fire once the MIDI
+  // notes for that exact active song have actually loaded.
+  const playedSongKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!song || committed) return;
-    if (notes.length === 0) return; // wait for MIDI to load
-    if (song.id === playedSongIdRef.current) return;
-    playedSongIdRef.current = song.id;
+    if (!song || !midiUrl) {
+      playedSongKeyRef.current = null;
+      return;
+    }
+    if (committed) return;
+    if (midiLoading || midiError || notes.length === 0) return;
+
+    const songKey = `${song.id}:${midiUrl}`;
+    if (songKey === playedSongKeyRef.current) return;
+    playedSongKeyRef.current = songKey;
 
     // Auto-play on song change. The visual scroll starts immediately; audio
     // layers in once the browser has unlocked the AudioContext.
     player.play();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [song?.id, committed, notes.length]);
+  }, [song?.id, midiUrl, committed, midiLoading, midiError, notes.length]);
 
   // ── Stop looping when committed flips true ──────────────────────────────────
   const prevCommittedRef = useRef(committed);
@@ -232,6 +237,12 @@ export default function Hero({
     [player],
   );
 
+  const unlockAudio = useCallback(() => {
+    if (!committed && notes.length > 0) {
+      playPreview();
+    }
+  }, [committed, notes.length, playPreview]);
+
   // ── One-time audio unlock ────────────────────────────────────────────────────
   // Browsers block the AudioContext until a user gesture, so the very first
   // hover-autoplay is silent. On the first interaction anywhere, arm audio and
@@ -239,19 +250,13 @@ export default function Hero({
   // plays with sound automatically.
   useEffect(() => {
     if (player.armed) return;
-    const unlock = () => {
-      if (!committed && notes.length > 0) {
-        player.play();
-      }
-    };
-    window.addEventListener("pointerdown", unlock, { once: true });
-    window.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("pointerdown", unlockAudio, { once: true });
+    window.addEventListener("keydown", unlockAudio, { once: true });
     return () => {
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [player.armed, committed, notes.length]);
+  }, [player.armed, unlockAudio]);
 
   // ── Spacebar = play / pause ──────────────────────────────────────────────────
   useEffect(() => {
@@ -323,6 +328,54 @@ export default function Hero({
           )}
         </div>
 
+        {/* ── Muted audio callout (top-right, dismisses on first interaction) ──── */}
+        {song && !player.armed && !committed && (
+          <button
+            type="button"
+            onClick={unlockAudio}
+            className="
+              group flex shrink-0 items-center gap-2.5 self-start rounded-full
+              border border-brass/35 bg-brass/10 py-1.5 pl-1.5 pr-3.5 text-left
+              shadow-[0_0_24px_rgba(202,164,106,0.08)]
+              transition-all
+              hover:border-brass/50 hover:bg-brass/14
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass
+            "
+            aria-label="Audio is muted. Click anywhere to unmute."
+            aria-live="polite"
+          >
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-brass/30 bg-room/70 text-brass animate-pulse group-hover:bg-brass/15">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.7}
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4.5 9.75v4.5h3.25L12 18.5v-13L7.75 9.75H4.5z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M16 9l4 4m0-4l-4 4"
+                />
+              </svg>
+            </span>
+            <span className="min-w-0 leading-tight">
+              <span className="block text-sm font-medium text-ivory">
+                Muted
+              </span>
+              <span className="block text-[10px] text-ivory-dim/60">
+                Click to unmute
+              </span>
+            </span>
+          </button>
+        )}
+
         {/* Favorite star */}
         {song && (
           <button
@@ -348,25 +401,6 @@ export default function Hero({
           </button>
         )}
       </header>
-
-      {/* ── Autoplay sound hint (dismisses on first interaction) ─────────────── */}
-      {song && !player.armed && !committed && (
-        <div
-          className="mx-6 mb-1 flex shrink-0 items-center gap-2 rounded-md border border-room-line bg-room-raised/50 px-3 py-1.5"
-          aria-live="polite"
-        >
-          <svg
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className="h-3.5 w-3.5 shrink-0 text-brass/60"
-          >
-            <path d="M10 2a.75.75 0 01.75.75v.258a33.186 33.186 0 016.668 1.478.75.75 0 11-.483 1.42A31.621 31.621 0 0010 4.513a31.63 31.63 0 00-6.935 1.393.75.75 0 01-.484-1.42 33.186 33.186 0 016.669-1.478V2.75A.75.75 0 0110 2zM10 7c-.456 0-.908.012-1.357.034a.75.75 0 01-.088-1.497A26.82 26.82 0 0110 5.5c.497 0 .99.013 1.478.036a.75.75 0 01-.088 1.497A25.32 25.32 0 0010 7zm-4.5 2.25a.75.75 0 01.75.75v.034a25.5 25.5 0 007.5 0V10a.75.75 0 011.5 0v.277a.75.75 0 01-.627.74 27 27 0 01-9.246 0A.75.75 0 014.75 10.277V10a.75.75 0 01.75-.75z" />
-          </svg>
-          <p className="text-xs text-ivory-dim/50">
-            Click anywhere to enable sound
-          </p>
-        </div>
-      )}
 
       {/* ── 2. Piano roll (dominant) ──────────────────────────────────────────── */}
       <div className="relative mx-5 mb-3 flex min-h-0 flex-1 flex-col">
