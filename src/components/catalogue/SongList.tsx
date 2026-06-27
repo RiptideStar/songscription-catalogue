@@ -514,7 +514,10 @@ export default function SongList({
       ) : (
         /* Scrolling song list */
         <ul
-          className="flex-1 overflow-y-auto flex flex-col gap-1 px-2 pb-4"
+          // overflow-y-auto forces horizontal clipping too, so pad the left
+          // generously to give a hovered row room to pop out (translateX)
+          // without being clipped at the list's edge.
+          className="flex-1 overflow-y-auto flex flex-col gap-1 pl-5 pr-2 pb-4"
           onPointerLeave={() => onHover(null)}
           aria-label="Song library"
         >
