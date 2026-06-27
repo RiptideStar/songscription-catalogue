@@ -121,9 +121,15 @@ function SongPanel({
   // the song is already committed (practicing).
   const showPractice = isActive && !isCommitted;
 
-  // Panel style: osu!-style pop-out when active. The pop is a touch more
+  // A row reads as "popped out" when it's the hover-preview OR the committed
+  // (practicing) song. Committing by click keeps the enlarged selected look so
+  // the row stays popped even after the cursor moves elsewhere — the song
+  // you're practicing should never collapse back to a normal row.
+  const isPopped = isActive || isCommitted;
+
+  // Panel style: osu!-style pop-out when popped. The pop is a touch more
   // significant than a plain hover so committing-by-click feels intentional.
-  const panelStyle: React.CSSProperties = isActive
+  const panelStyle: React.CSSProperties = isPopped
     ? {
         transform: "translateX(-10px) scale(1.025)",
         boxShadow: `0 0 0 1px ${hexToRgba(song.color, 0.6)}, 0 6px 26px ${hexToRgba(song.color, 0.32)}`,
@@ -133,8 +139,8 @@ function SongPanel({
 
   const accentBarStyle: React.CSSProperties = {
     backgroundColor: song.color,
-    width: isActive ? "4px" : "3px",
-    opacity: isActive ? 1 : 0.6,
+    width: isPopped ? "4px" : "3px",
+    opacity: isPopped ? 1 : 0.6,
   };
 
   return (
@@ -218,7 +224,7 @@ function SongPanel({
             <span
               className={[
                 "font-serif text-sm leading-snug line-clamp-2 transition-colors duration-150",
-                isActive ? "text-[#ece4d3]" : "text-[#a89e8c] group-hover/panel:text-[#ece4d3]",
+                isPopped ? "text-[#ece4d3]" : "text-[#a89e8c] group-hover/panel:text-[#ece4d3]",
               ].join(" ")}
             >
               {song.title}
