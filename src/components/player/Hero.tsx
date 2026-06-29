@@ -50,6 +50,84 @@ function DifficultyDots({ value }: { value: number }) {
   );
 }
 
+/**
+ * MutedPopdown — a transient notice that drops down from the top edge of the
+ * Hero, floating over the content, and slides back up when dismissed. It reads
+ * as a toast that visited the page, not as a permanent header element.
+ *
+ * `visible` drives the animation; the component keeps itself mounted through the
+ * slide-up exit, then unmounts once the transition finishes.
+ */
+function MutedPopdown({
+  visible,
+  onClick,
+}: {
+  visible: boolean;
+  onClick: () => void;
+}) {
+  // `mounted` keeps the node in the DOM through the slide-up exit animation; the
+  // enter animation runs on mount via the CSS keyframe (no rAF/state dance).
+  const [mounted, setMounted] = useState(visible);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      return;
+    }
+    // Leaving: play the slide-up, then unmount once it finishes.
+    const t = setTimeout(() => setMounted(false), 300);
+    return () => clearTimeout(t);
+  }, [visible]);
+
+  if (!mounted) return null;
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center pt-3"
+      aria-live="polite"
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className={[
+          "pointer-events-auto flex items-center gap-2 rounded-full",
+          // Neutral dark chip, not a brass accent — reads as a quiet system
+          // notice (Instagram-style mute hint) rather than part of the UI.
+          "bg-black/55 py-1.5 pl-2.5 pr-3.5 backdrop-blur-md",
+          "shadow-[0_6px_20px_rgba(0,0,0,0.4)] ring-1 ring-white/10",
+          "transition-colors duration-200 hover:bg-black/70",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+          visible ? "animate-popdown-in" : "animate-popdown-out",
+        ].join(" ")}
+        aria-label="Audio is muted. Tap to unmute."
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.8}
+          className="h-3.5 w-3.5 shrink-0 text-white/80"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M4.5 9.75v4.5h3.25L12 18.5v-13L7.75 9.75H4.5z"
+          />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M16 9l4 4m0-4l-4 4"
+          />
+        </svg>
+        <span className="text-xs font-medium text-white/75">
+          Muted · tap to unmute
+        </span>
+      </button>
+    </div>
+  );
+}
+
 /** Loading shimmer for the roll while MIDI is fetching. */
 function RollShimmer() {
   return (
@@ -90,10 +168,23 @@ function RollShimmer() {
 function EmptyCanvas({ totalCount }: { totalCount: number }) {
   if (totalCount > 0) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
-        <p className="font-serif text-xl text-ivory-dim/60 select-none">
-          Hover a song to preview it
-        </p>
+      <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
+        {/* Ambient brass breath — the lamplit room glowing softly while idle. */}
+        <div
+          className="room-breath pointer-events-none absolute h-72 w-72 rounded-full blur-3xl"
+          style={{ background: "radial-gradient(circle, rgba(202,164,106,0.16), transparent 70%)" }}
+          aria-hidden
+        />
+        <div className="relative flex flex-col items-center gap-5 select-none">
+          <p className="idle-prompt-pulse font-serif text-xl text-ivory-dim">
+            Hover a song to preview it
+          </p>
+          {/* Quiet drifting key-shimmer — keeps the stage feeling "on". */}
+          <div
+            className="idle-keys-strip h-[3px] w-44 rounded-full opacity-40"
+            aria-hidden
+          />
+        </div>
       </div>
     );
   }
@@ -126,9 +217,6 @@ function EmptyCanvas({ totalCount }: { totalCount: number }) {
       <p className="max-w-sm text-sm leading-relaxed text-ivory-dim/40">
         Upload a MIDI file to begin — your transcriptions will appear here as a
         scrolling piano roll.
-      </p>
-      <p className="text-xs text-ivory-dim/30">
-        Upload a song from the panel on the right →
       </p>
     </div>
   );
@@ -205,10 +293,14 @@ export default function Hero({
 
   const isFav = optimisticFav ?? song?.is_favorite ?? false;
 
+  // Burst tick — bumps only when favoriting ON, to replay the star pop + ring.
+  const [favBurst, setFavBurst] = useState(0);
+
   const handleFavorite = useCallback(async () => {
     if (!song) return;
     const next = !isFav;
     setOptimisticFav(next);
+    if (next) setFavBurst((n) => n + 1);
     try {
       const res = await fetch(`/api/transcriptions/${song.id}`, {
         method: "PATCH",
@@ -284,6 +376,13 @@ export default function Hero({
       className="relative flex h-full flex-col bg-room"
       style={{ background: "#16130f" }}
     >
+      {/* ── Muted notice — a popdown that drops in from the top edge and slides
+          back up on first interaction (or when committing to practice). ──────── */}
+      <MutedPopdown
+        visible={!!song && !player.armed && !committed}
+        onClick={unlockAudio}
+      />
+
       {/* ── 1. Header strip ──────────────────────────────────────────────────── */}
       <header className="flex shrink-0 items-start justify-between gap-4 px-6 pt-5 pb-3">
         <div className="min-w-0 flex-1">
@@ -326,69 +425,31 @@ export default function Hero({
           )}
         </div>
 
-        {/* ── Muted audio callout (top-right, dismisses on first interaction) ──── */}
-        {song && !player.armed && !committed && (
-          <button
-            type="button"
-            onClick={unlockAudio}
-            className="
-              group flex shrink-0 items-center gap-2.5 self-start rounded-full
-              border border-brass/35 bg-brass/10 py-1.5 pl-1.5 pr-3.5 text-left
-              shadow-[0_0_24px_rgba(202,164,106,0.08)]
-              transition-all
-              hover:border-brass/50 hover:bg-brass/14
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass
-            "
-            aria-label="Audio is muted. Click anywhere to unmute."
-            aria-live="polite"
-          >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-brass/30 bg-room/70 text-brass animate-pulse group-hover:bg-brass/15">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.7}
-                className="h-4 w-4"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4.5 9.75v4.5h3.25L12 18.5v-13L7.75 9.75H4.5z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M16 9l4 4m0-4l-4 4"
-                />
-              </svg>
-            </span>
-            <span className="min-w-0 leading-tight">
-              <span className="block text-sm font-medium text-ivory">
-                Muted
-              </span>
-              <span className="block text-[10px] text-ivory-dim/60">
-                Click to unmute
-              </span>
-            </span>
-          </button>
-        )}
-
         {/* Favorite star */}
         {song && (
           <button
             type="button"
             onClick={handleFavorite}
-            className="shrink-0 rounded-full p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass"
+            className="relative shrink-0 rounded-full p-1.5 transition-colors hover:scale-110 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass"
             style={{ color: isFav ? "#caa46a" : "rgba(168,158,140,0.4)" }}
             aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
           >
+            {/* Expanding ring on favorite — remounts via key to replay. */}
+            {favBurst > 0 && isFav && (
+              <span
+                key={favBurst}
+                className="animate-fav-ring pointer-events-none absolute inset-0 rounded-full"
+                style={{ border: "2px solid #caa46a" }}
+                aria-hidden
+              />
+            )}
             <svg
               viewBox="0 0 24 24"
               fill={isFav ? "currentColor" : "none"}
               stroke="currentColor"
               strokeWidth={1.5}
-              className="h-5 w-5"
+              className={`h-5 w-5 ${favBurst > 0 && isFav ? "animate-fav-pop" : ""}`}
+              key={`star-${favBurst}-${isFav}`}
             >
               <path
                 strokeLinecap="round"
@@ -528,8 +589,9 @@ export default function Hero({
               className="
                 flex h-11 w-11 items-center justify-center rounded-full
                 border border-brass/30 bg-brass/10
-                text-brass transition-colors
-                hover:bg-brass/20 hover:border-brass/50
+                text-brass transition-all duration-150
+                hover:bg-brass/20 hover:border-brass/50 hover:scale-105
+                active:scale-90
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass
                 disabled:cursor-not-allowed disabled:opacity-30
               "

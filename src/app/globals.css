@@ -63,3 +63,179 @@ body {
 .font-serif {
   font-optical-sizing: auto;
 }
+
+/* Muted popdown — drops in from the top edge, slides back up on dismiss. The
+   enter animation runs on mount (no JS toggle needed); the exit class plays
+   the reverse before the node unmounts. */
+@keyframes popdown-in {
+  from {
+    transform: translateY(-140%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes popdown-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-140%);
+    opacity: 0;
+  }
+}
+.animate-popdown-in {
+  animation: popdown-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-popdown-out {
+  animation: popdown-out 0.28s cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+/* Idle hero — the room is "on" while nothing is hovered. A slow brass breath
+   behind the prompt and a gently drifting key-shimmer strip, both quiet enough
+   to read as ambient light, not animation. Reduced-motion stills them. */
+@keyframes room-breath {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+@keyframes idle-keys-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 200px 0;
+  }
+}
+@keyframes idle-prompt-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+.room-breath {
+  animation: room-breath 6s ease-in-out infinite;
+}
+.idle-keys-strip {
+  /* A repeating warm/ivory "keyboard" gradient that drifts slowly sideways. */
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(236, 228, 211, 0.22) 0px,
+    rgba(236, 228, 211, 0.22) 7px,
+    transparent 7px,
+    transparent 14px,
+    rgba(202, 164, 106, 0.5) 14px,
+    rgba(202, 164, 106, 0.5) 19px,
+    transparent 19px,
+    transparent 26px
+  );
+  animation: idle-keys-drift 9s linear infinite;
+}
+.idle-prompt-pulse {
+  animation: idle-prompt-pulse 5s ease-in-out infinite;
+}
+
+/* Favorite burst — a quick star-pop with an expanding ring, fired on favoriting. */
+@keyframes fav-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.4);
+  }
+  60% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes fav-ring {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+.animate-fav-pop {
+  animation: fav-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.animate-fav-ring {
+  animation: fav-ring 0.5s ease-out both;
+}
+
+/* Commit flash — a quick local payoff fired on the song row you click into
+   practice, so the click has a response *where it happened* before the eye
+   travels to the hero's swell. A brief brighten + nudge that settles. */
+@keyframes commit-flash {
+  0% {
+    transform: translateX(-10px) scale(1.025);
+  }
+  30% {
+    transform: translateX(-14px) scale(1.06);
+    filter: brightness(1.35);
+  }
+  100% {
+    transform: translateX(-10px) scale(1.025);
+    filter: brightness(1);
+  }
+}
+.animate-commit-flash {
+  animation: commit-flash 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Sort cycle — each click remounts the button (squash-pop) and the label
+   (slides up + fades in) so cycling through sort keys feels playful. The
+   reduced-motion block at the top of this file neutralizes both. */
+@keyframes sort-cycle-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(0.94);
+  }
+  70% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes sort-cycle-label-in {
+  from {
+    transform: translateY(70%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.sort-cycle {
+  animation: sort-cycle-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.sort-cycle-label {
+  display: inline-block;
+  animation: sort-cycle-label-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.sort-cycle:active .sort-cycle-arrow {
+  transform: rotate(180deg);
+}
+.sort-cycle-arrow {
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.15s;
+}

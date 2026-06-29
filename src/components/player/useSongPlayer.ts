@@ -212,8 +212,22 @@ export function useSongPlayer({
     // a SYNCHRONOUS flag before the first await so concurrent calls bail here —
     // otherwise they all sail past the audioRef guard (which isn't set until the
     // end) and each calls Transport.start(), stacking overlapping playbacks.
-    if (startingRef.current || audioRef.current) return;
+    //
+    // BUT: the very first attempt (e.g. deep-link autoplay with no user gesture
+    // yet) awaits `Tone.start()`, which the browser leaves *pending* — it neither
+    // resolves nor rejects until a gesture arrives. If we let that pending call
+    // hold the lock, the later gesture-driven retry ("tap anywhere to unmute")
+    // bails here and audio never unlocks. So once we're armed-by-gesture we don't
+    // need the lock anymore; and we cap how long a single attempt may hold it.
+    if (audioRef.current) return;
+    if (startingRef.current) return;
     startingRef.current = true;
+    // Failsafe: never let a hung Tone.start() hold the lock forever. If this
+    // attempt is still in flight after a moment, release the lock so the next
+    // user gesture can try again with the AudioContext now unlocked.
+    const lockRelease = setTimeout(() => {
+      startingRef.current = false;
+    }, 500);
     try {
       const Tone = await ensureTone();
       await Tone.start();
@@ -235,17 +249,23 @@ export function useSongPlayer({
       if (!scheduledRef.current) Tone.Transport.cancel();
       scheduleNotes(Tone, synthRef.current);
 
+      // Guard against a double-start: if another attempt (e.g. the gesture retry
+      // that ran while this one was pending on Tone.start) already brought audio
+      // up, don't start the transport again.
+      if (audioRef.current) return;
+
       // Align audio to where the visual clock currently is.
       const now = performance.now();
       const elapsed = elapsedAtRef.current + (now - startedAtRef.current) / 1000;
       Tone.Transport.seconds = loopRef.current
         ? elapsed % (totalRef.current || 1)
         : Math.min(elapsed, totalRef.current);
-      Tone.Transport.start();
       audioRef.current = true;
+      Tone.Transport.start();
     } catch {
       // Audio still locked — visual keeps running; we retry on next play/gesture.
     } finally {
+      clearTimeout(lockRelease);
       startingRef.current = false;
     }
   }, [ensureTone, scheduleNotes]);

@@ -20,61 +20,10 @@
  * child components (SongList, Hero) are presentational + emit events up.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Transcription, SortKey } from "@/lib/types";
-import { formatDuration, hexToRgba } from "@/lib/format";
 import SongList from "./SongList";
 import Hero from "../player/Hero";
-
-/**
- * CollapsedPracticeCard — fills the entire right side with just the committed
- * (practicing) song while the pointer is away. Echoes the song row's accent
- * styling at full-panel scale. Moving the pointer over the aside re-opens the
- * full library (handled by the parent), so this is purely presentational.
- */
-function CollapsedPracticeCard({ song }: { song: Transcription }) {
-  return (
-    <div
-      className="flex h-full w-full flex-col justify-between p-6"
-      style={{
-        background: `linear-gradient(160deg, ${hexToRgba(song.color, 0.18)} 0%, rgba(26,22,16,0.6) 55%)`,
-      }}
-      aria-label={`Practicing ${song.title}`}
-    >
-      {/* Accent rail + practicing badge */}
-      <div className="flex items-center gap-2">
-        <span
-          className="h-2 w-2 rounded-full"
-          style={{ backgroundColor: song.color, boxShadow: `0 0 10px ${song.color}` }}
-          aria-hidden
-        />
-        <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-amber-400/80">
-          Practicing
-        </span>
-      </div>
-
-      {/* Title + stats, vertically centered for emphasis */}
-      <div className="flex flex-1 flex-col justify-center">
-        <h2
-          className="font-serif text-3xl font-light leading-tight text-ivory"
-          style={{ textShadow: `0 0 28px ${hexToRgba(song.color, 0.4)}` }}
-        >
-          {song.title}
-        </h2>
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-ivory-dim/60">
-          <span className="tabular-nums">{formatDuration(song.duration_sec)}</span>
-          {song.key_sig && <span className="text-ivory-dim/45">{song.key_sig}</span>}
-          {song.tempo_bpm !== null && (
-            <span className="tabular-nums text-ivory-dim/45">{song.tempo_bpm} BPM</span>
-          )}
-        </div>
-      </div>
-
-      {/* Spacer keeps the title block vertically centered within the panel. */}
-      <span aria-hidden />
-    </div>
-  );
-}
 
 interface CatalogueShellProps {
   initialSongs: Transcription[];
@@ -98,6 +47,11 @@ export default function CatalogueShell({
   // song card. Moving the mouse over the right side re-opens the full library;
   // moving it away collapses again. `listHovered` tracks pointer-over-aside.
   const [listHovered, setListHovered] = useState(false);
+  // After a commit the cursor is usually still parked over the aside, so a stray
+  // pointer-move would instantly re-open the list we just collapsed. We only arm
+  // re-open once the pointer has actually *left* the aside — then a deliberate
+  // move back onto it re-opens. A ref (not state) so it never triggers a render.
+  const reopenArmed = useRef(false);
 
   // Discovery state (search / sort / filter)
   const [query, setQuery] = useState("");
@@ -115,6 +69,23 @@ export default function CatalogueShell({
     const qs = params.toString();
     window.history.replaceState(null, "", qs ? `/?${qs}` : "/");
   }, []);
+
+  // ── Esc exits practice mode ─────────────────────────────────────────────────
+  // Drops back to preview of the same song (keeps selection + the roll on screen)
+  // and re-opens the collapsed library. Ignored while typing in the search box.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !committed) return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      setCommitted(false);
+      setListHovered(false);
+      reopenArmed.current = true;
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [committed]);
 
   // Sync selection when the user navigates back/forward.
   useEffect(() => {
@@ -168,8 +139,10 @@ export default function CatalogueShell({
   const activeSong = songs.find((s) => s.id === activeId) ?? null;
   const isCommitted = committed;
 
-  // Right side collapses to just the committed song while practicing, unless the
-  // pointer is over it (then the full library re-opens for browsing).
+  // While practicing, the sidebar collapses to a thin edge strip so the hero
+  // (full Practice mode) fills the page, unless the pointer is over the strip
+  // (then the full library re-opens for browsing). Guard on the committed song
+  // still existing so we never collapse around a since-deleted selection.
   const committedSong = committed
     ? songs.find((s) => s.id === selectedId) ?? null
     : null;
@@ -177,12 +150,15 @@ export default function CatalogueShell({
 
   // ── Selection handlers ─────────────────────────────────────────────────────
   // Hover = preview: switch the hero while hovered and drop out of practice mode.
+  // The preview is *sticky* — when the pointer leaves the list (id === null) we
+  // keep showing the last hovered song rather than snapping back to the deep-
+  // linked selection. So moving the mouse onto the hero to watch/scrub keeps the
+  // song you were just previewing. A fresh hover replaces it; a click commits it.
   const handleHover = useCallback(
     (id: string | null) => {
+      if (id === null) return; // pointer left the list — hold the last preview
       setHoveredId(id);
-      if (id !== null) {
-        setCommitted(false);
-      }
+      setCommitted(false);
     },
     [],
   );
@@ -193,9 +169,11 @@ export default function CatalogueShell({
       setCommitted(true);
       setHoveredId(null);
       // Collapse the right side to the committed song immediately on commit,
-      // even though the cursor is still over the list. Re-opens on the next
-      // pointer move over the aside (see onPointerMove below).
+      // even though the cursor is still over the list. Disarm re-open so the
+      // collapse sticks until the pointer leaves and deliberately returns —
+      // otherwise a stray move would bounce the list back open at once.
       setListHovered(false);
+      reopenArmed.current = false;
       updateUrl(id);
     },
     [updateUrl],
@@ -256,19 +234,40 @@ export default function CatalogueShell({
       </section>
 
       {/* ── RIGHT: Song list (osu! song-select) ── */}
-      {/* relative z-10 so a popped-out row (which slides left on hover) floats
-          over the hero on the left, instead of being clipped beneath it.
-          While practicing, this collapses to just the committed song; moving the
-          pointer over it re-opens the full library. */}
+      {/* While practicing, the aside collapses to a thin edge strip so the hero
+          (full Practice mode) fills the whole page. Moving the pointer to the
+          right edge slides the full library back in. When open it floats over the
+          hero (z-10) so a popped-out row can slide left without being clipped. */}
       <aside
-        className="relative z-10 w-[300px] shrink-0 border-l border-room-line bg-room/60 backdrop-blur-sm sm:w-[340px] lg:w-[380px]"
+        className={[
+          "relative z-10 shrink-0 border-l border-room-line bg-room/60 backdrop-blur-sm",
+          "transition-[width] duration-300 ease-out",
+          listCollapsed
+            ? "w-3 hover:w-3 cursor-w-resize"
+            : "w-[300px] sm:w-[340px] lg:w-[380px]",
+        ].join(" ")}
+        aria-label={listCollapsed ? "Show song library" : undefined}
         onPointerMove={() => {
-          if (committed && !listHovered) setListHovered(true);
+          // Only re-open once the pointer has left the aside and come back —
+          // arming happens in onPointerLeave. Stops the just-collapsed list
+          // from springing open under a cursor that never left after the click.
+          if (committed && !listHovered && reopenArmed.current) {
+            setListHovered(true);
+          }
         }}
-        onPointerLeave={() => setListHovered(false)}
+        onPointerLeave={() => {
+          setListHovered(false);
+          reopenArmed.current = true;
+        }}
       >
-        {listCollapsed && committedSong ? (
-          <CollapsedPracticeCard song={committedSong} />
+        {listCollapsed ? (
+          // Thin re-open handle: an accent sliver hinting the library is hidden
+          // here. Hovering the strip (pointer-enter → onPointerMove) slides it
+          // back open.
+          <span
+            className="pointer-events-none absolute inset-y-0 right-0 w-px bg-room-line"
+            aria-hidden
+          />
         ) : (
           <SongList
             songs={visibleSongs}
